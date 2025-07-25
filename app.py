@@ -4,7 +4,7 @@ from datetime import datetime
 import os
 import time
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, firestore, storage, initialize_app
 import tempfile
 import json
 
