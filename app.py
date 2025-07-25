@@ -7,6 +7,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage, initialize_app
 import tempfile
 import json
+# Initialize Firebase only once
+if not firebase_admin._apps:
+    cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
+    cred = credentials.Certificate(cred_dict)
+    initialize_app(cred, {
+        'storageBucket': 'pipe-analysis.appspot.com'  # Replace with your actual bucket
+    })
 
 # Load Firebase credentials from secrets
 cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
