@@ -1,1 +1,6 @@
 firebase-admin
+streamlit
+firebase-admin
+pandas
+numpy
+
