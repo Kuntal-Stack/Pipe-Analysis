@@ -7,15 +7,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import tempfile
 import json
-
-# Firebase Initialization (Safe & Correct)
+# Only initialize Firebase if it hasn't been already
 if not firebase_admin._apps:
     cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
     cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred, {
         'storageBucket': 'pipe-analysis.appspot.com'
     })
-
 db = firestore.client()
 bucket = storage.bucket()
 
