@@ -8,17 +8,16 @@ from firebase_admin import credentials, firestore, storage
 import tempfile
 import json
 
-# Initialize Firebase only if not already initialized
+# Firebase Initialization (Safe & Correct)
 if not firebase_admin._apps:
     cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
     cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred, {
         'storageBucket': 'pipe-analysis.firebasestorage.app'
-    }, name='pipe-app')
+    })
 
-app = firebase_admin.get_app('pipe-app')
-db = firestore.client(app)
-bucket = storage.bucket(app=app)
+db = firestore.client()
+bucket = storage.bucket()
 
 # 🔹 Page setup
 st.set_page_config(page_title="PG Analysis", layout="wide")
