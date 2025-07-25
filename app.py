@@ -4,23 +4,21 @@ from datetime import datetime
 import os
 import time
 import firebase_admin
-from firebase_admin import credentials, firestore, storage, initialize_app
+from firebase_admin import credentials, firestore, storage
 import tempfile
 import json
-# Initialize Firebase only once
+
+# Initialize Firebase only if not already initialized
 if not firebase_admin._apps:
     cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
     cred = credentials.Certificate(cred_dict)
-    initialize_app(cred, {
-        'storageBucket': 'pipe-analysis.appspot.com'  # Replace with your actual bucket
-    })
+    firebase_admin.initialize_app(cred, {
+        'storageBucket': 'pipe-analysis.firebasestorage.app'
+    }, name='pipe-app')
 
-# Load Firebase credentials from secrets
-cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
-cred = credentials.Certificate(cred_dict)
-initialize_app(cred, {
-    'storageBucket': 'pipe-analysis.appspot.com'
-})
+app = firebase_admin.get_app('pipe-app')
+db = firestore.client(app)
+bucket = storage.bucket(app=app)
 
 # 🔹 Page setup
 st.set_page_config(page_title="PG Analysis", layout="wide")
