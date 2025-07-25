@@ -13,7 +13,7 @@ if not firebase_admin._apps:
     cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
     cred = credentials.Certificate(cred_dict)
     firebase_admin.initialize_app(cred, {
-        'storageBucket': 'pipe-analysis.firebasestorage.app'
+        'storageBucket': 'pipe-analysis.appspot.com'
     })
 
 db = firestore.client()
