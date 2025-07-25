@@ -7,6 +7,16 @@ import firebase_admin
 from firebase_admin import credentials, firestore, storage
 import tempfile
 import streamlit as st
+import streamlit as st
+import json
+from firebase_admin import credentials, initialize_app, storage
+
+# Load Firebase credentials from secrets
+cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
+cred = credentials.Certificate(cred_dict)
+initialize_app(cred, {
+    'storageBucket': 'pipe-analysis.appspot.com'
+})
 
 # 🔹 Page setup
 st.set_page_config(page_title="PG Analysis", layout="wide")
