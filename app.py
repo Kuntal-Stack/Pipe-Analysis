@@ -53,7 +53,7 @@ def load_firebase_csv(file_path):
     # Use a temporary file to download the data.
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
         blob.download_to_filename(tmp.name)
-        df = pd.read_csv(tmp.name)
+        df = pd.read_csv(tmp.name, low_memory=False)
     os.remove(tmp.name) # Clean up the temporary file
     return df
 
@@ -173,7 +173,7 @@ def highlight_success(val):
     else: bgcolor = "#e74c3c"  # Red
     return f"background-color: {bgcolor}; color: {color}; font-weight: bold;"
 
-styled_df = summary.style.applymap(highlight_success, subset=["Success %"])
+styled_df = summary.style.map(highlight_success, subset=["Success %"])
 st.dataframe(styled_df, use_container_width=True, height=500)
 
 # --- Download and Upload Actions ---
