@@ -73,6 +73,20 @@ if not all_data:
     st.stop()
 
 df = pd.concat(all_data, ignore_index=True)
+# Normalize status column (lowercase, no spaces)
+if "status" in df.columns:
+    df["status"] = df["status"].astype(str).str.strip().str.lower()
+
+# Show raw data
+st.subheader("📦 Raw Data Preview")
+st.dataframe(df.head(50))
+
+# Show available columns
+st.write("🔍 Columns:", df.columns.tolist())
+
+# Show unique values in 'status'
+st.write("🧪 Unique status values:", df["status"].unique())
+
 st.subheader("📦 Raw Data Preview")
 st.dataframe(df.head(50))
 
@@ -81,9 +95,10 @@ required_cols = ["client_name", "client_code", "pg_pay_mode", "payment_mode", "s
 if not all(col in df.columns for col in required_cols + ["status"]):
     st.error("❌ Missing required columns in data.")
     st.stop()
-
+# ✅ Filter rows where status is either 'success' or 'failed'
 filtered_df = df[df["status"].isin(["success", "failed"])]
-
+# ✅ Debug line to check if filtering worked
+st.write("✅ Filtered rows count:", len(filtered_df))
 summary = (
     filtered_df
     .groupby(["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"])
