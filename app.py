@@ -1,4 +1,3 @@
-# --- Full Streamlit App with Interactive Change Pipe Button ---
 import streamlit as st
 import pandas as pd
 import os
@@ -28,8 +27,9 @@ db, bucket = initialize_firebase()
 
 # --- Page Setup ---
 st.set_page_config(page_title="PIPE Analysis", layout="wide")
-st.markdown("## 🔌 PIPE ANALYSIS")
 
+# 🔠 Header
+st.markdown("## 🔌 PIPE ANALYSIS")
 alert_col, refresh_col = st.columns([1, 1])
 alert_clicked = alert_col.button("🔔 Alert (Critical Only)")
 refresh_clicked = refresh_col.button("🔁 Refresh")
@@ -46,6 +46,7 @@ def load_firebase_csv(file_path):
     os.remove(tmp.name)
     return df
 
+# --- Load CSVs ---
 available_files = list_firebase_csv_files()
 if not available_files:
     st.warning("⚠️ No CSVs found in Firebase Storage.")
@@ -58,7 +59,7 @@ if not selected_dates:
     st.info("ℹ️ Please select at least one date.")
     st.stop()
 
-# --- Load Data ---
+# Load all selected files
 all_data = []
 load_durations = {}
 for date_str in selected_dates:
@@ -104,6 +105,11 @@ if filtered_df.empty:
     st.stop()
 
 # --- Summary Metrics ---
+total_success = (filtered_df["status"] == "success").sum()
+total_failed = (filtered_df["status"] == "failed").sum()
+total_all = total_success + total_failed
+success_percent = round((total_success / total_all) * 100, 2) if total_all else 0
+
 summary = (
     filtered_df
     .groupby(["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"])
@@ -119,17 +125,18 @@ for col in ["success", "failed"]:
 summary["Total Txn"] = summary["success"] + summary["failed"]
 summary["Success %"] = round((summary["success"] / summary["Total Txn"]) * 100, 2).fillna(0)
 
+# ➕ Add Status Column
 def get_status(p):
     if p >= 90: return "Healthy"
     elif p >= 70: return "Warning"
     else: return "Critical"
 
 summary["Status"] = summary["Success %"].apply(get_status)
-
-# --- Top KPIs ---
+# --- Top-level Summary Metrics ---
 total_success = summary["success"].sum()
 total_failed = summary["failed"].sum()
 total_txn = total_success + total_failed
+
 success_percent = round((total_success / total_txn) * 100, 2) if total_txn else 0
 failed_percent = round((total_failed / total_txn) * 100, 2) if total_txn else 0
 
@@ -140,7 +147,7 @@ m3.metric("❌ Total Failed", f"{total_failed:,}")
 m4.metric("📈 Success %", f"{success_percent}%")
 m5.metric("📉 Failed %", f"{failed_percent}%")
 
-# --- Summary Filter Buttons ---
+# --- Summary Boxes ---
 status_counts = summary["Status"].value_counts().to_dict()
 col1, col2, col3 = st.columns(3)
 
@@ -154,6 +161,7 @@ summary_button(col1, "🟢 Healthy", "#2ecc71", status_counts.get("Healthy", 0),
 summary_button(col2, "🟡 Warning", "#f1c40f", status_counts.get("Warning", 0), "Warning")
 summary_button(col3, "🔴 Critical", "#e74c3c", status_counts.get("Critical", 0), "Critical")
 
+# --- Filtering ---
 if "status_filter" not in st.session_state:
     st.session_state["status_filter"] = None
 
@@ -165,43 +173,37 @@ if refresh_clicked:
 if st.session_state["status_filter"]:
     summary = summary[summary["Status"] == st.session_state["status_filter"]]
 
-# --- Sorting ---
+# ➕ Action Button Column
+def render_action(row):
+    key = f"change_pipe_{row.name}"
+    if st.button("Change Pipe", key=key):
+        st.session_state["selected_row"] = row.to_dict()
+
+# Sorting Dropdown
 sort_option = st.selectbox("🔽 Sort by Success %", ["Default", "🔼 Lowest to Highest", "🔽 Highest to Lowest"])
 if sort_option == "🔼 Lowest to Highest":
     summary = summary.sort_values("Success %", ascending=True)
 elif sort_option == "🔽 Highest to Lowest":
     summary = summary.sort_values("Success %", ascending=False)
 
-# --- Action Buttons Inline in Table ---
+# ➕ Add Action Column Display
 summary_display = summary.copy()
+summary_display["Action"] = "Change Pipe"
 
-def make_action_button(row):
-    key = f"change_pipe_{row.name}"
-    return f'''
-        <form action="" method="post">
-            <button type="submit" name="{key}" 
-            style="padding:5px 12px; background-color:#007bff; color:white; border:none; border-radius:5px; cursor:pointer;">
-                Change Pipe
-            </button>
-        </form>
-    '''
+# Show Table
+st.dataframe(summary_display, use_container_width=True)
 
-summary_display["Action"] = summary_display.apply(make_action_button, axis=1)
-st.write("### 📋 Pipe Summary Table")
-st.write(summary_display.to_html(escape=False, index=False), unsafe_allow_html=True)
-
-# --- Manual Button Detection ---
+# Render Action Buttons
+st.markdown("### 🛠️ Pipe Actions")
 for idx, row in summary.iterrows():
-    key = f"change_pipe_{row.name}"
-    if key in st.session_state or st.experimental_get_query_params().get(key):
-        st.session_state["selected_row"] = row.to_dict()
-        break
+    with st.expander(f"{row['client_name']} - {row['client_code']} ({row['pg_pay_mode']})"):
+        render_action(row)
 
-# --- Modal Form Logic ---
+# ➕ Modal Logic
 if "selected_row" in st.session_state:
     row = st.session_state["selected_row"]
     with st.form("pipe_change_form", clear_on_submit=True):
-        st.markdown("### 🔄 Change Pipe for: **" + row["client_code"] + "**")
+        st.markdown("### 🔄 Change Pipe")
         selected_pipe = st.selectbox("Select New Pipe", ["BOB", "AIRTEL", "YES BANK", "INDIAN BANK", "NPST", "HDFC", "ICICI BANK"])
         entered_keys = st.text_input("Enter Required Keys (comma-separated)")
         colA, colB = st.columns(2)
@@ -209,17 +211,17 @@ if "selected_row" in st.session_state:
         cancel = colB.form_submit_button("❌ Cancel")
 
         if submitted:
-            st.success(f"Pipe for `{row['client_code']}` set to **{selected_pipe}** with keys: `{entered_keys}`")
-            # Firestore update logic (optional)
+            st.success(f"Pipe for {row['client_code']} set to {selected_pipe} with keys: {entered_keys}")
             del st.session_state["selected_row"]
         elif cancel:
             del st.session_state["selected_row"]
 
-# --- Download & Upload ---
+# Download
 csv = summary.to_csv(index=False).encode("utf-8")
 download_name = f"PIPE_Analysis_({'_'.join(selected_dates)}).csv"
 st.download_button("📥 Download Summary", data=csv, file_name=download_name, mime="text/csv")
 
+# Firestore Upload
 if st.button("📤 Upload to Firestore"):
     with st.spinner("Uploading..."):
         try:
@@ -232,6 +234,6 @@ if st.button("📤 Upload to Firestore"):
         except Exception as e:
             st.error(f"❌ Upload failed: {e}")
 
-# --- Footer ---
+# Footer
 load_summary = ", ".join([f"{k} ({v}s)" for k, v in load_durations.items()])
 st.caption(f"⏱️ Files loaded: {load_summary}")
