@@ -30,21 +30,23 @@ st.set_page_config(page_title="PIPE Analysis", layout="wide")
 
 # 🔠 Header
 # 🔠 Logo + PIPE ANALYSIS Heading
-# 🔗 Clickable SabPaisa Logo + PIPE ANALYSIS Heading
-logo_col, title_col = st.columns([0.1, 0.9])
+# 🔗 Large Clickable SabPaisa Logo + PIPE ANALYSIS Heading
+logo_col, title_col = st.columns([0.12, 0.88])  # Adjusted for larger logo
 
 with logo_col:
     st.markdown(
         f'''
         <a href="https://www.sabpaisa.in" target="_blank">
-            <img src="https://services.sabpaisa.in/pages/images/Sab-Paisa-small.png" width="60" style="margin-top: 10px;" />
+            <img src="https://services.sabpaisa.in/pages/images/Sab-Paisa-small.png"
+                 width="90" style="margin-top: 0px;" />
         </a>
         ''',
         unsafe_allow_html=True
     )
 
 with title_col:
-    st.markdown("🔌PIPE ANALYSIS")
+    st.markdown("## 🔌 PIPE ANALYSIS")
+
 
 
 alert_col, refresh_col = st.columns([1, 1])
