@@ -73,6 +73,8 @@ if not all_data:
     st.stop()
 
 df = pd.concat(all_data, ignore_index=True)
+st.subheader("📦 Raw Data Preview")
+st.dataframe(df.head(50))
 
 # --- Summary Generation ---
 required_cols = ["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"]
