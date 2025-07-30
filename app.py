@@ -32,7 +32,7 @@ def initialize_firebase():
 
     except Exception as e:
         st.error(f"❌ Firebase Initialization Failed: {e}")
-        st.error("Please ensure your `FIREBASE_CREDENTIALS` secret is set correctly in your Streamlit Cloud app settings.")
+        st.error("Please ensure your FIREBASE_CREDENTIALS secret is set correctly in your Streamlit Cloud app settings.")
         st.stop()
 
 # Initialize Firebase at the start of the app.
