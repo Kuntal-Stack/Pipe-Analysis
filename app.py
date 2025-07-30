@@ -132,6 +132,20 @@ def get_status(p):
     else: return "Critical"
 
 summary["Status"] = summary["Success %"].apply(get_status)
+# --- Top-level Summary Metrics ---
+total_success = summary["success"].sum()
+total_failed = summary["failed"].sum()
+total_txn = total_success + total_failed
+
+success_percent = round((total_success / total_txn) * 100, 2) if total_txn else 0
+failed_percent = round((total_failed / total_txn) * 100, 2) if total_txn else 0
+
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("🔢 Total Transactions", f"{total_txn:,}")
+m2.metric("✅ Total Success", f"{total_success:,}")
+m3.metric("❌ Total Failed", f"{total_failed:,}")
+m4.metric("📈 Success %", f"{success_percent}%")
+m5.metric("📉 Failed %", f"{failed_percent}%")
 
 # --- Summary Boxes ---
 status_counts = summary["Status"].value_counts().to_dict()
