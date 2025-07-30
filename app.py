@@ -113,7 +113,14 @@ def get_status(success_percent):
         return "Warning"
     else:
         return "Critical"
-
+# Define the function before applying it
+def get_status(success_percent):
+    if success_percent >= 90:
+        return "Healthy"
+    elif success_percent >= 70:
+        return "Warning"
+    else:
+        return "Critical"
 summary["Status"] = summary["Success %"].apply(get_status)
 
 # --- Summary Counts ---
