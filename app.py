@@ -94,87 +94,88 @@ if not all_data:
 
 df = pd.concat(all_data, ignore_index=True)
 
-# --- Data Processing and Analysis ---
-# Column checks and normalization
-required_cols = ["client_code", "pg_pay_mode", "payment_mode", "status"]
-missing = [col for col in required_cols if col not in df.columns]
-if missing:
-    st.error(f"❌ The loaded files are missing required columns: {', '.join(missing)}")
-    st.stop()
+# --- Update Page Heading and Add Buttons ---
+st.markdown("## 🚰 PIPE ANALYSIS")
 
-if "client_name" not in df.columns:
-    df["client_name"] = "Unknown"
+colA1, colA2 = st.columns([1, 1])
+if colA1.button("🔔 Alert (Critical Only)"):
+    summary = summary.assign(Status=summary["Success %"].apply(
+        lambda x: "Critical" if x < 70 else "Warning" if x < 90 else "Healthy"))
+    summary = summary[summary["Status"] == "Critical"]
+if colA2.button("🔁 Refresh"):
+    st.experimental_rerun()
 
-# Normalize data types and values
-for col in ["status", "pg_pay_mode", "payment_mode", "client_code", "client_name"]:
-    df[col] = df[col].astype(str).str.strip()
+# --- Add Status Column ---
+def get_status(success_percent):
+    if success_percent >= 90:
+        return "Healthy"
+    elif success_percent >= 70:
+        return "Warning"
+    else:
+        return "Critical"
 
-def normalize_status(val):
-    val = val.lower()
-    if "success" in val: return "success"
-    if "fail" in val: return "failed"
-    return "other"
+summary["Status"] = summary["Success %"].apply(get_status)
 
-df["status"] = df["status"].apply(normalize_status)
-filtered_df = df[df["status"].isin(["success", "failed"])]
+# --- Summary Counts ---
+healthy_count = (summary["Status"] == "Healthy").sum()
+warning_count = (summary["Status"] == "Warning").sum()
+critical_count = (summary["Status"] == "Critical").sum()
 
-if filtered_df.empty:
-    st.warning("⚠️ No 'success' or 'failed' transactions found in the selected data.")
-    st.stop()
+s1, s2, s3 = st.columns(3)
+if s1.button(f"🟢 Healthy: {healthy_count}"):
+    summary = summary[summary["Status"] == "Healthy"]
+if s2.button(f"🟡 Warning: {warning_count}"):
+    summary = summary[summary["Status"] == "Warning"]
+if s3.button(f"🔴 Critical: {critical_count}"):
+    summary = summary[summary["Status"] == "Critical"]
 
-# --- Display Metrics and Data ---
-# Top bar metrics
-total_success = (filtered_df["status"] == "success").sum()
-total_failed = (filtered_df["status"] == "failed").sum()
-total_all = total_success + total_failed
-success_percent = round((total_success / total_all) * 100, 2) if total_all else 0
-failed_percent = round((total_failed / total_all) * 100, 2) if total_all else 0
+# --- Add Action Column ---
+summary["Action"] = ""
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("🔢 Total Transactions", f"{total_all:,}")
-c2.metric("✅ Success Count", f"{total_success:,}")
-c3.metric("❌ Failed Count", f"{total_failed:,}")
-c4.metric("✅ Success %", f"{success_percent}%")
-c5.metric("❌ Failed %", f"{failed_percent}%")
+for i in summary.index:
+    btn_id = f"change_pipe_{i}"
+    if st.button("Change Pipe", key=btn_id):
+        with st.modal("🔄 Change Pipe"):
+            selected_pipe = st.selectbox(
+                "Select New Pipe",
+                ["BOB", "AIRTEL", "YES BANK", "INDIAN BANK", "NPST", "HDFC", "ICICI BANK"]
+            )
+            key_input = st.text_input("Enter Required KEYS")
+            colX1, colX2 = st.columns([1, 1])
+            if colX1.button("✅ Activate"):
+                st.success(f"Pipe changed to {selected_pipe} with keys: {key_input}")
+            if colX2.button("❌ Cancel"):
+                st.info("Cancelled pipe change")
 
-# Group and summarize data
-summary = (
-    filtered_df
-    .groupby(["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"])
-    .size()
-    .unstack(fill_value=0)
-    .reset_index()
-)
-
-for col in ["success", "failed"]:
-    if col not in summary.columns:
-        summary[col] = 0
-
-summary["Total Txn"] = summary["success"] + summary["failed"]
-summary["Success %"] = round((summary["success"] / summary["Total Txn"]) * 100, 2).fillna(0)
-
-summary = summary[[
+# --- Reorder Columns for Final Display ---
+final_cols = [
     "client_name", "client_code", "pg_pay_mode", "payment_mode",
-    "success", "failed", "Total Txn", "Success %"
-]]
+    "success", "failed", "Total Txn", "Success %", "Status", "Action"
+]
+summary = summary[final_cols]
 
-# Sorting dropdown
-sort_option = st.selectbox("🔽 Sort by Success %", ["Default", "🔼 Lowest to Highest", "🔽 Highest to Lowest"])
-if sort_option == "🔼 Lowest to Highest":
-    summary = summary.sort_values("Success %", ascending=True)
-elif sort_option == "🔽 Highest to Lowest":
-    summary = summary.sort_values("Success %", ascending=False)
-
-# Heatmap styling for the summary table
+# --- Styled Display ---
 def highlight_success(val):
     color = "white"
-    if val >= 95: bgcolor = "#2ecc71"  # Green
-    elif val >= 80: bgcolor = "#f1c40f"  # Yellow
-    else: bgcolor = "#e74c3c"  # Red
+    if val >= 95:
+        bgcolor = "#2ecc71"
+    elif val >= 80:
+        bgcolor = "#f1c40f"
+    else:
+        bgcolor = "#e74c3c"
     return f"background-color: {bgcolor}; color: {color}; font-weight: bold;"
 
-styled_df = summary.style.map(highlight_success, subset=["Success %"])
-st.dataframe(styled_df, use_container_width=True, height=500)
+def highlight_status(val):
+    if val == "Healthy":
+        return "background-color: #2ecc71; color: white"
+    elif val == "Warning":
+        return "background-color: #f1c40f; color: black"
+    elif val == "Critical":
+        return "background-color: #e74c3c; color: white"
+    return ""
+
+styled_df = summary.style.map(highlight_success, subset=["Success %"]).map(highlight_status, subset=["Status"])
+st.dataframe(styled_df, use_container_width=True, height=600)
 
 # --- Download and Upload Actions ---
 # Download button
