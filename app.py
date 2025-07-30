@@ -8,104 +8,86 @@ import tempfile
 import json
 
 # --- Firebase Initialization ---
-# This function handles the connection to Firebase using secrets.
 def initialize_firebase():
-    """
-    Initializes the Firebase Admin SDK using Streamlit secrets.
-    Returns Firestore and Storage clients.
-    """
     try:
-        # Check if the app is already initialized to prevent errors.
         if not firebase_admin._apps:
-            # The secret is stored as a single string, so we parse it as JSON.
-            # This is the line that was causing the KeyError before.
             cred_dict = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred, {
                 'storageBucket': 'pipe-analysis.firebasestorage.app'
             })
-        
-        # Get the Firestore and Storage clients after initialization.
         db = firestore.client()
         bucket = storage.bucket()
         return db, bucket
-
     except Exception as e:
         st.error(f"❌ Firebase Initialization Failed: {e}")
-        st.error("Please ensure your FIREBASE_CREDENTIALS secret is set correctly in your Streamlit Cloud app settings.")
         st.stop()
 
-# Initialize Firebase at the start of the app.
 db, bucket = initialize_firebase()
 
 # --- Page Setup ---
-st.set_page_config(page_title="PG Analysis", layout="wide")
-st.title("📊 Client Code-wise PG & Payment Mode Analysis")
+st.set_page_config(page_title="PIPE Analysis", layout="wide")
 
-# --- Firebase Storage Functions ---
+# 🔠 Header
+st.markdown("## 🔌 PIPE ANALYSIS")
+alert_col, refresh_col = st.columns([1, 1])
+alert_clicked = alert_col.button("🔔 Alert (Critical Only)")
+refresh_clicked = refresh_col.button("🔁 Refresh")
+
+# --- Firebase Storage ---
 def list_firebase_csv_files():
-    """Lists all CSV files in the 'pipe_data/' folder in Firebase Storage."""
     return [blob.name for blob in bucket.list_blobs(prefix="pipe_data/") if blob.name.endswith(".csv")]
 
 def load_firebase_csv(file_path):
-    """Downloads a CSV from Firebase Storage and loads it into a DataFrame."""
     blob = bucket.blob(file_path)
-    # Use a temporary file to download the data.
     with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tmp:
         blob.download_to_filename(tmp.name)
         df = pd.read_csv(tmp.name, low_memory=False)
-    os.remove(tmp.name) # Clean up the temporary file
+    os.remove(tmp.name)
     return df
 
-# --- Main App Logic ---
+# --- Load CSVs ---
 available_files = list_firebase_csv_files()
 if not available_files:
-    st.warning("⚠️ No CSV files found in Firebase Storage under the 'pipe_data/' folder.")
+    st.warning("⚠️ No CSVs found in Firebase Storage.")
     st.stop()
 
-# Extract clean dates from file paths for the selector.
 available_dates = sorted([os.path.basename(f).replace(".csv", "") for f in available_files])
-
-# Multiselect for date selection.
-selected_dates = st.multiselect("📅 Select Dates", options=available_dates, default=[available_dates[-1]] if available_dates else [])
+selected_dates = st.multiselect("📅 Select Dates", options=available_dates, default=[available_dates[-1]])
 
 if not selected_dates:
-    st.info("ℹ️ Please select at least one date to view the analysis.")
+    st.info("ℹ️ Please select at least one date.")
     st.stop()
 
-# Load data from Firebase for the selected dates.
+# Load all selected files
 all_data = []
 load_durations = {}
-
 for date_str in selected_dates:
     file_path = f"pipe_data/{date_str}.csv"
-    start_time = time.time()
     try:
+        start = time.time()
         df = load_firebase_csv(file_path)
         df["__source_date"] = date_str
         all_data.append(df)
-        load_durations[date_str] = round(time.time() - start_time, 2)
+        load_durations[date_str] = round(time.time() - start, 2)
     except Exception as e:
-        st.error(f"❌ Error loading {file_path} from Firebase: {e}")
+        st.error(f"❌ Failed loading {file_path}: {e}")
 
 if not all_data:
-    st.warning("⚠️ Could not load data for the selected dates. Please check file contents or selection.")
     st.stop()
 
 df = pd.concat(all_data, ignore_index=True)
 
-# --- Data Processing and Analysis ---
-# Column checks and normalization
+# --- Data Normalization ---
 required_cols = ["client_code", "pg_pay_mode", "payment_mode", "status"]
 missing = [col for col in required_cols if col not in df.columns]
 if missing:
-    st.error(f"❌ The loaded files are missing required columns: {', '.join(missing)}")
+    st.error(f"Missing columns: {', '.join(missing)}")
     st.stop()
 
 if "client_name" not in df.columns:
     df["client_name"] = "Unknown"
 
-# Normalize data types and values
 for col in ["status", "pg_pay_mode", "payment_mode", "client_code", "client_name"]:
     df[col] = df[col].astype(str).str.strip()
 
@@ -119,25 +101,15 @@ df["status"] = df["status"].apply(normalize_status)
 filtered_df = df[df["status"].isin(["success", "failed"])]
 
 if filtered_df.empty:
-    st.warning("⚠️ No 'success' or 'failed' transactions found in the selected data.")
+    st.warning("⚠️ No valid transactions found.")
     st.stop()
 
-# --- Display Metrics and Data ---
-# Top bar metrics
+# --- Summary Metrics ---
 total_success = (filtered_df["status"] == "success").sum()
 total_failed = (filtered_df["status"] == "failed").sum()
 total_all = total_success + total_failed
 success_percent = round((total_success / total_all) * 100, 2) if total_all else 0
-failed_percent = round((total_failed / total_all) * 100, 2) if total_all else 0
 
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("🔢 Total Transactions", f"{total_all:,}")
-c2.metric("✅ Success Count", f"{total_success:,}")
-c3.metric("❌ Failed Count", f"{total_failed:,}")
-c4.metric("✅ Success %", f"{success_percent}%")
-c5.metric("❌ Failed %", f"{failed_percent}%")
-
-# Group and summarize data
 summary = (
     filtered_df
     .groupby(["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"])
@@ -153,55 +125,101 @@ for col in ["success", "failed"]:
 summary["Total Txn"] = summary["success"] + summary["failed"]
 summary["Success %"] = round((summary["success"] / summary["Total Txn"]) * 100, 2).fillna(0)
 
-summary = summary[[
-    "client_name", "client_code", "pg_pay_mode", "payment_mode",
-    "success", "failed", "Total Txn", "Success %"
-]]
+# ➕ Add Status Column
+def get_status(p):
+    if p >= 90: return "Healthy"
+    elif p >= 70: return "Warning"
+    else: return "Critical"
 
-# Sorting dropdown
+summary["Status"] = summary["Success %"].apply(get_status)
+
+# --- Summary Boxes ---
+status_counts = summary["Status"].value_counts().to_dict()
+col1, col2, col3 = st.columns(3)
+
+def summary_button(col, label, color, count, status_type):
+    if col.button(f"{label} ({count})"):
+        st.session_state["status_filter"] = status_type
+    with col:
+        st.markdown(f"<div style='padding:8px; background:{color}; color:white; border-radius:5px; text-align:center; font-weight:bold'>{label}: {count}</div>", unsafe_allow_html=True)
+
+summary_button(col1, "🟢 Healthy", "#2ecc71", status_counts.get("Healthy", 0), "Healthy")
+summary_button(col2, "🟡 Warning", "#f1c40f", status_counts.get("Warning", 0), "Warning")
+summary_button(col3, "🔴 Critical", "#e74c3c", status_counts.get("Critical", 0), "Critical")
+
+# --- Filtering ---
+if "status_filter" not in st.session_state:
+    st.session_state["status_filter"] = None
+
+if alert_clicked:
+    st.session_state["status_filter"] = "Critical"
+if refresh_clicked:
+    st.session_state["status_filter"] = None
+
+if st.session_state["status_filter"]:
+    summary = summary[summary["Status"] == st.session_state["status_filter"]]
+
+# ➕ Action Button Column
+def render_action(row):
+    key = f"change_pipe_{row.name}"
+    if st.button("Change Pipe", key=key):
+        st.session_state["selected_row"] = row.to_dict()
+
+# Sorting Dropdown
 sort_option = st.selectbox("🔽 Sort by Success %", ["Default", "🔼 Lowest to Highest", "🔽 Highest to Lowest"])
 if sort_option == "🔼 Lowest to Highest":
     summary = summary.sort_values("Success %", ascending=True)
 elif sort_option == "🔽 Highest to Lowest":
     summary = summary.sort_values("Success %", ascending=False)
 
-# Heatmap styling for the summary table
-def highlight_success(val):
-    color = "white"
-    if val >= 95: bgcolor = "#2ecc71"  # Green
-    elif val >= 80: bgcolor = "#f1c40f"  # Yellow
-    else: bgcolor = "#e74c3c"  # Red
-    return f"background-color: {bgcolor}; color: {color}; font-weight: bold;"
+# ➕ Add Action Column Display
+summary_display = summary.copy()
+summary_display["Action"] = "Change Pipe"
 
-styled_df = summary.style.map(highlight_success, subset=["Success %"])
-st.dataframe(styled_df, use_container_width=True, height=500)
+# Show Table
+st.dataframe(summary_display, use_container_width=True)
 
-# --- Download and Upload Actions ---
-# Download button
+# Render Action Buttons
+st.markdown("### 🛠️ Pipe Actions")
+for idx, row in summary.iterrows():
+    with st.expander(f"{row['client_name']} - {row['client_code']} ({row['pg_pay_mode']})"):
+        render_action(row)
+
+# ➕ Modal Logic
+if "selected_row" in st.session_state:
+    row = st.session_state["selected_row"]
+    with st.form("pipe_change_form", clear_on_submit=True):
+        st.markdown("### 🔄 Change Pipe")
+        selected_pipe = st.selectbox("Select New Pipe", ["BOB", "AIRTEL", "YES BANK", "INDIAN BANK", "NPST", "HDFC", "ICICI BANK"])
+        entered_keys = st.text_input("Enter Required Keys (comma-separated)")
+        colA, colB = st.columns(2)
+        submitted = colA.form_submit_button("✅ Activate")
+        cancel = colB.form_submit_button("❌ Cancel")
+
+        if submitted:
+            st.success(f"Pipe for {row['client_code']} set to {selected_pipe} with keys: {entered_keys}")
+            del st.session_state["selected_row"]
+        elif cancel:
+            del st.session_state["selected_row"]
+
+# Download
 csv = summary.to_csv(index=False).encode("utf-8")
 download_name = f"PIPE_Analysis_({'_'.join(selected_dates)}).csv"
-st.download_button("📥 Download Summary as CSV", data=csv, file_name=download_name, mime="text/csv")
+st.download_button("📥 Download Summary", data=csv, file_name=download_name, mime="text/csv")
 
-# Upload to Firestore button
-if st.button("📤 Upload Summary to Firebase Firestore"):
+# Firestore Upload
+if st.button("📤 Upload to Firestore"):
     with st.spinner("Uploading..."):
         try:
-            collection_name = "pipe_summary"
-            # Clear existing collection before upload
-            for doc in db.collection(collection_name).stream():
+            collection = "pipe_summary"
+            for doc in db.collection(collection).stream():
                 doc.reference.delete()
-            
-            # Upload new summary
             for _, row in summary.iterrows():
-                doc_data = row.to_dict()
-                # Create a unique document ID
-                doc_id = f"{row['client_code']}_{row['pg_pay_mode']}_{row['payment_mode']}"
-                db.collection(collection_name).document(doc_id).set(doc_data)
-            
-            st.success("✅ Summary uploaded to Firebase Firestore successfully!")
+                db.collection(collection).document(f"{row['client_code']}_{row['pg_pay_mode']}_{row['payment_mode']}").set(row.to_dict())
+            st.success("✅ Uploaded successfully to Firestore.")
         except Exception as e:
-            st.error(f"❌ Firebase upload failed: {e}")
+            st.error(f"❌ Upload failed: {e}")
 
-# Footer with load times
+# Footer
 load_summary = ", ".join([f"{k} ({v}s)" for k, v in load_durations.items()])
 st.caption(f"⏱️ Files loaded: {load_summary}")
