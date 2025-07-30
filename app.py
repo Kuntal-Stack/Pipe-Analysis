@@ -29,7 +29,24 @@ db, bucket = initialize_firebase()
 st.set_page_config(page_title="PIPE Analysis", layout="wide")
 
 # 🔠 Header
-st.markdown("## 🔌 PIPE ANALYSIS")
+# 🔠 Logo + PIPE ANALYSIS Heading
+# 🔗 Clickable SabPaisa Logo + PIPE ANALYSIS Heading
+logo_col, title_col = st.columns([0.1, 0.9])
+
+with logo_col:
+    st.markdown(
+        f'''
+        <a href="https://www.sabpaisa.in" target="_blank">
+            <img src="https://services.sabpaisa.in/pages/images/Sab-Paisa-small.png" width="60" style="margin-top: 10px;" />
+        </a>
+        ''',
+        unsafe_allow_html=True
+    )
+
+with title_col:
+    st.markdown("## 🔌 PIPE ANALYSIS")
+
+
 alert_col, refresh_col = st.columns([1, 1])
 alert_clicked = alert_col.button("🔔 Alert (Critical Only)")
 refresh_clicked = refresh_col.button("🔁 Refresh")
