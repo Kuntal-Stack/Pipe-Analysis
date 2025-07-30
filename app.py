@@ -44,7 +44,7 @@ with logo_col:
     )
 
 with title_col:
-    st.markdown("## 🔌 PIPE ANALYSIS")
+    st.markdown("🔌PIPE ANALYSIS")
 
 
 alert_col, refresh_col = st.columns([1, 1])
