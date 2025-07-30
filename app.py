@@ -27,9 +27,9 @@ db, bucket = initialize_firebase()
 
 # --- Page Setup ---
 st.set_page_config(page_title="PIPE Analysis", layout="wide")
-
-# 🔠 Header
 st.markdown("## 🔌 PIPE ANALYSIS")
+
+# Alert / Refresh Buttons
 alert_col, refresh_col = st.columns([1, 1])
 alert_clicked = alert_col.button("🔔 Alert (Critical Only)")
 refresh_clicked = refresh_col.button("🔁 Refresh")
@@ -99,17 +99,11 @@ def normalize_status(val):
 
 df["status"] = df["status"].apply(normalize_status)
 filtered_df = df[df["status"].isin(["success", "failed"])]
-
 if filtered_df.empty:
     st.warning("⚠️ No valid transactions found.")
     st.stop()
 
-# --- Summary Metrics ---
-total_success = (filtered_df["status"] == "success").sum()
-total_failed = (filtered_df["status"] == "failed").sum()
-total_all = total_success + total_failed
-success_percent = round((total_success / total_all) * 100, 2) if total_all else 0
-
+# --- Grouped Summary ---
 summary = (
     filtered_df
     .groupby(["client_name", "client_code", "pg_pay_mode", "payment_mode", "status"])
@@ -125,18 +119,17 @@ for col in ["success", "failed"]:
 summary["Total Txn"] = summary["success"] + summary["failed"]
 summary["Success %"] = round((summary["success"] / summary["Total Txn"]) * 100, 2).fillna(0)
 
-# ➕ Add Status Column
+# ➕ Status Column
 def get_status(p):
     if p >= 90: return "Healthy"
     elif p >= 70: return "Warning"
     else: return "Critical"
-
 summary["Status"] = summary["Success %"].apply(get_status)
-# --- Top-level Summary Metrics ---
+
+# --- Top Summary Metrics ---
 total_success = summary["success"].sum()
 total_failed = summary["failed"].sum()
 total_txn = total_success + total_failed
-
 success_percent = round((total_success / total_txn) * 100, 2) if total_txn else 0
 failed_percent = round((total_failed / total_txn) * 100, 2) if total_txn else 0
 
@@ -147,7 +140,7 @@ m3.metric("❌ Total Failed", f"{total_failed:,}")
 m4.metric("📈 Success %", f"{success_percent}%")
 m5.metric("📉 Failed %", f"{failed_percent}%")
 
-# --- Summary Boxes ---
+# --- Summary Buttons ---
 status_counts = summary["Status"].value_counts().to_dict()
 col1, col2, col3 = st.columns(3)
 
@@ -157,71 +150,68 @@ def summary_button(col, label, color, count, status_type):
     with col:
         st.markdown(f"<div style='padding:8px; background:{color}; color:white; border-radius:5px; text-align:center; font-weight:bold'>{label}: {count}</div>", unsafe_allow_html=True)
 
-summary_button(col1, "🟢 Healthy", "#2ecc71", status_counts.get("Healthy", 0), "Healthy")
-summary_button(col2, "🟡 Warning", "#f1c40f", status_counts.get("Warning", 0), "Warning")
-summary_button(col3, "🔴 Critical", "#e74c3c", status_counts.get("Critical", 0), "Critical")
-
-# --- Filtering ---
 if "status_filter" not in st.session_state:
     st.session_state["status_filter"] = None
-
 if alert_clicked:
     st.session_state["status_filter"] = "Critical"
 if refresh_clicked:
     st.session_state["status_filter"] = None
 
+summary_button(col1, "🟢 Healthy", "#2ecc71", status_counts.get("Healthy", 0), "Healthy")
+summary_button(col2, "🟡 Warning", "#f1c40f", status_counts.get("Warning", 0), "Warning")
+summary_button(col3, "🔴 Critical", "#e74c3c", status_counts.get("Critical", 0), "Critical")
+
+# --- Filtering ---
 if st.session_state["status_filter"]:
     summary = summary[summary["Status"] == st.session_state["status_filter"]]
 
-# ➕ Action Button Column
-def render_action(row):
-    key = f"change_pipe_{row.name}"
-    if st.button("Change Pipe", key=key):
-        st.session_state["selected_row"] = row.to_dict()
-
-# Sorting Dropdown
+# --- Sorting ---
 sort_option = st.selectbox("🔽 Sort by Success %", ["Default", "🔼 Lowest to Highest", "🔽 Highest to Lowest"])
 if sort_option == "🔼 Lowest to Highest":
     summary = summary.sort_values("Success %", ascending=True)
 elif sort_option == "🔽 Highest to Lowest":
     summary = summary.sort_values("Success %", ascending=False)
 
-# ➕ Add Action Column Display
-summary_display = summary.copy()
-summary_display["Action"] = "Change Pipe"
+# --- Pipe Action Logic ---
+if "selected_pipe_row" not in st.session_state:
+    st.session_state["selected_pipe_row"] = None
 
-# Show Table
-st.dataframe(summary_display, use_container_width=True)
-
-# Render Action Buttons
-st.markdown("### 🛠️ Pipe Actions")
+st.markdown("### 📋 PIPE STATUS TABLE")
 for idx, row in summary.iterrows():
-    with st.expander(f"{row['client_name']} - {row['client_code']} ({row['pg_pay_mode']})"):
-        render_action(row)
+    cols = st.columns([2, 2, 2, 2, 1, 1, 1, 1.5, 1, 1])
+    cols[0].write(row["client_name"])
+    cols[1].write(row["client_code"])
+    cols[2].write(row["pg_pay_mode"])
+    cols[3].write(row["payment_mode"])
+    cols[4].write(int(row["success"]))
+    cols[5].write(int(row["failed"]))
+    cols[6].write(int(row["Total Txn"]))
+    cols[7].write(f"{row['Success %']}%")
+    cols[8].write(row["Status"])
+    if cols[9].button("Change Pipe", key=f"change_pipe_{idx}"):
+        st.session_state["selected_pipe_row"] = row.to_dict()
 
-# ➕ Modal Logic
-if "selected_row" in st.session_state:
-    row = st.session_state["selected_row"]
-    with st.form("pipe_change_form", clear_on_submit=True):
-        st.markdown("### 🔄 Change Pipe")
+# --- Modal for Change Pipe ---
+if st.session_state["selected_pipe_row"]:
+    row = st.session_state["selected_pipe_row"]
+    with st.modal(f"🔧 Change Pipe for {row['client_code']}", key="pipe_modal"):
+        st.markdown("### 🧰 Update Pipe Information")
         selected_pipe = st.selectbox("Select New Pipe", ["BOB", "AIRTEL", "YES BANK", "INDIAN BANK", "NPST", "HDFC", "ICICI BANK"])
-        entered_keys = st.text_input("Enter Required Keys (comma-separated)")
-        colA, colB = st.columns(2)
-        submitted = colA.form_submit_button("✅ Activate")
-        cancel = colB.form_submit_button("❌ Cancel")
+        entered_keys = st.text_area("🔑 Enter Required Keys", placeholder="E.g., token, pipe_key, secret...")
 
-        if submitted:
-            st.success(f"Pipe for {row['client_code']} set to {selected_pipe} with keys: {entered_keys}")
-            del st.session_state["selected_row"]
-        elif cancel:
-            del st.session_state["selected_row"]
+        col1, col2 = st.columns(2)
+        if col1.button("✅ Activate"):
+            st.success(f"✅ Pipe changed for {row['client_code']} → {selected_pipe}")
+            st.session_state["selected_pipe_row"] = None
+        if col2.button("❌ Cancel"):
+            st.session_state["selected_pipe_row"] = None
 
-# Download
+# --- Download Button ---
 csv = summary.to_csv(index=False).encode("utf-8")
 download_name = f"PIPE_Analysis_({'_'.join(selected_dates)}).csv"
 st.download_button("📥 Download Summary", data=csv, file_name=download_name, mime="text/csv")
 
-# Firestore Upload
+# --- Upload to Firestore ---
 if st.button("📤 Upload to Firestore"):
     with st.spinner("Uploading..."):
         try:
